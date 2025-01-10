@@ -1,0 +1,370 @@
+* start container
+- 现在的状态：
+  - 已经有了安装好emacs的docker镜像：ubuntu-emacs:24.04
+- 需求：
+  - 创建docker volume，名字为：EmacsDir
+  - 编写 docker-compose.yml：
+    - 作用为：启动container，挂载EmacsDir到/root/emacsdir
+    - 创建环境变量，指导spacemacs将所有的配置文件安装到/root/emacsdir
+- 额外要求：
+  输出格式为emacs org格式
+
+
+
+* Start Container with Docker Compose
+** Current Status
+   - A Docker image with Emacs installed is available: `ubuntu-emacs:24.04`
+
+** Requirements
+   1. Create a Docker volume named `EmacsDir`.
+   2. Write a `docker-compose.yml` file to:
+      - Start a container.
+      - Mount `EmacsDir` to `/root/emacsdir`.
+      - Set environment variables to instruct Spacemacs to use `/root/emacsdir` for all configuration files.
+
+** Steps
+*** Step 1: Create Docker Volume
+    Execute the following command to create the volume:
+    #+BEGIN_SRC bash
+    docker volume create EmacsDir
+    #+END_SRC
+
+*** Step 2: Write `docker-compose.yml`
+    Below is the content for the `docker-compose.yml` file:
+    #+BEGIN_SRC yaml
+    version: '3.8'
+    services:
+      emacs-container:
+        image: ubuntu-emacs:24.04  # Use the specified image
+        container_name: emacs-container
+        volumes:
+          - EmacsDir:/root/emacsdir  # Mount the volume
+        environment:
+          - HOME=/root/emacsdir     # Set HOME environment variable
+          - DOTSPACEMACS=/root/emacsdir/.spacemacs.d  # Spacemacs configuration directory
+        tty: true                   # Keep the terminal open
+        stdin_open: true            # Enable standard input
+    volumes:
+      EmacsDir:
+        external: true              # Use the external volume
+    #+END_SRC
+
+*** Step 3: Start the Container
+    Use the following command to start the container with `docker-compose.yml`:
+    #+BEGIN_SRC bash
+    docker-compose up -d
+    #+END_SRC
+
+*** Step 4: Verify Mount and Environment Variables
+    After the container is running, verify the mount and environment variables:
+    #+BEGIN_SRC bash
+      docker exec -it emacs-container bash
+      echo $HOME
+      echo $DOTSPACEMACS
+      ls /root/emacsdir
+    #+END_SRC
+
+** Notes
+   - If Spacemacs does not automatically load configurations to `/root/emacsdir`, manually copy the configuration files to the directory.
+   - Ensure the directory has proper read/write permissions for all plugins and configurations to function correctly.
+
+
+* Docker Compose Configuration
+** Modified `docker-compose.yml`
+   - Added settings to enable GUI forwarding and additional volume mounting.
+   - Integrated `DISPLAY`, `XAUTHORITY`, and X11 socket configuration.
+
+#+BEGIN_SRC yaml
+version: '3.8'
+services:
+  emacs-container:
+    image: ubuntu-emacs:24.04  # Use the specified image
+    container_name: ubuntu_emacs
+    volumes:
+      - EmacsDir:/root/emacsdir  # Mount the volume
+      - /tmp/.X11-unix:/tmp/.X11-unix  # Mount X11 socket for GUI
+      - /Users/kakaluote/:/Users/kakaluote  # Mount additional host directory
+    environment:
+      - HOME=/root/emacsdir  # Set HOME environment variable
+      - DOTSPACEMACS=/root/emacsdir/.spacemacs.d  # Spacemacs configuration directory
+      - DISPLAY=host.docker.internal:0  # Forward GUI display
+      - XAUTHORITY=${XAUTHORITY}  # Pass XAUTHORITY
+    tty: true  # Keep terminal open
+    stdin_open: true  # Enable standard input
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Ensure host resolution for DISPLAY
+volumes:
+  EmacsDir:
+    external: true  # Use external volume
+#+END_SRC
+
+** Additional Notes
+   - To allow Docker access to X11 on the host machine, run the following command before starting the container:
+     #+BEGIN_SRC bash
+     xhost +local:docker
+     #+END_SRC
+
+   - Start the container using the `docker-compose.yml` file:
+     #+BEGIN_SRC bash
+     docker-compose up -d
+     #+END_SRC
+
+   - Verify GUI applications can display correctly by testing within the container:
+     #+BEGIN_SRC bash
+     docker exec -it ubuntu_emacs bash
+     emacs
+     #+END_SRC
+* 如何使用docker-compose.yml实现启动container时执行命令
+- 实现功能:
+  - 创建文件=~/.emacs.el=
+  - 并在该文件中添加内容=(load-file "~/emacsdir/.emacs.d/init.el")=
+   #+begin_src yaml
+     version: '3.8'
+     services:
+       emacs-container:
+         image: ubuntu-emacs:24.04
+         container_name: emacs-container
+         volumes:
+           - EmacsDir:/root/emacsdir
+           - /tmp/.X11-unix:/tmp/.X11-unix
+           - /Users/kakaluote/:/Users/kakaluote
+         environment:
+           - DISPLAY=host.docker.internal:0
+           - XAUTHORITY=${XAUTHORITY}
+         command: >
+           sh -c "echo '(load-file \\\"~/emacsdir/.emacs.d/init.el\\\")' > ~/.emacs.el &&
+                  exec bash"
+         tty: true
+         stdin_open: true
+     volumes:
+       EmacsDir:
+         external: true
+   #+end_src
+* share ssh files
+
+** Step 1: Create Docker Volume
+:LOGBOOK:
+- State "CANCELED"   from              [2025-01-09 四 13:51]
+:END:
+    Execute the following command to create the volume:
+    #+BEGIN_SRC bash
+    docker volume create sshDir
+    #+END_SRC
+** step 2: mount though docke-compose
+
+    
+* TODO: delete Docker as NFS Server
+- 现在的状态：
+  - 已经有了安装好ubuntu的docker镜像：ubuntu:24.04
+  - 主机的操作系统为macOS
+  - 使用的docker是docker desktop
+    
+- 需求：
+  - 在docker中创建nfs服务，共享/root/share
+  - 主机作为client，将共享文件夹挂载到~/nfs_share
+  - 便携式dockerfile，开启container时自动开启服务
+  - 主机上的挂载命令
+- 额外要求：
+  输出格式为emacs org格式
+** Current Status
+   - Docker image: `ubuntu:24.04` (installed)
+   - Host OS: macOS
+   - Docker environment: Docker Desktop
+
+** Requirements
+   - Create NFS service in the Docker container and share `/root/share`.
+   - Mount the shared folder on the host to `~/nfs_share`.
+   - Provide a portable `Dockerfile` to automatically start the NFS service when the container starts.
+   - Command to mount the shared folder on the host.
+
+** Implementation
+*** Dockerfile
+   Write a Dockerfile to set up an NFS server:
+   #+begin_src dockerfile
+   FROM ubuntu:24.04
+
+   RUN apt-get update && apt-get install -y nfs-kernel-server && \
+       mkdir -p /root/share && \
+       chmod 777 /root/share
+
+   # Add NFS export entry
+   RUN echo "/root/share *(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
+
+   # Expose necessary ports
+   EXPOSE 2049 111/udp 111/tcp
+
+   # Start NFS service
+   CMD ["bash", "-c", "rpcbind && service nfs-kernel-server start && tail -f /dev/null"]
+   #+end_src
+
+*** Build and Run the Docker Container
+   - Build the Docker image:
+     #+begin_src sh
+     docker build -t nfs-server .
+     #+end_src
+   - Run the container:
+     #+begin_src sh
+     docker run -d --name nfs-container --privileged --network host nfs-server
+     #+end_src
+
+*** Host Setup and Mount Command
+   - Ensure the `nfs-client` is installed on macOS:
+     #+begin_src sh
+     brew install nfs-utils
+     #+end_src
+   - Create the mount directory:
+     #+begin_src sh
+     mkdir -p ~/nfs_share
+     #+end_src
+   - Mount the shared folder:
+     #+begin_src sh
+     sudo mount -t nfs localhost:/root/share ~/nfs_share
+     #+end_src
+
+*** Notes
+   - The `--network host` flag ensures NFS communication without port forwarding.
+   - Adjust permissions for `/root/share` as required.
+
+     
+
+* 解决x11无法弹出的错误
+- 现在的状态：
+  - 已经有了安装好x11环境的docker镜像：ubuntu-emacs:24.04
+  - 主机的操作系统为macOS
+  - 使用的docker是docker desktop
+  - 重启之前可以正确弹出，重启后不能正确弹出
+- docker-compose.yml文件
+ #+begin_src yaml
+   version: '3.8'
+   services:
+     emacs-container:
+       image: ubuntu-emacs:24.04  # Use the specified image
+       container_name: ubuntu_emacs
+       privileged: true
+       network_mode: "host" # Use host networking
+       volumes:
+         - EmacsDir:/root/emacsdir  # Mount the volume
+         - sshDir:/root/.ssh
+         - dockerNFS:/root/share
+         - /tmp/.X11-unix:/tmp/.X11-unix  # Mount X11 socket for GUI
+         - /Users/kakaluote/:/Users/kakaluote  # Mount additional host directory
+       environment:
+         - SPACEMACSDIR=/root/emacsdir
+         - DISPLAY=host.docker.internal:0  # Forward GUI display
+         - XAUTHORITY=${XAUTHORITY}  # Pass XAUTHORITY
+       command: >
+         "echo '(load-file \"~/emacsdir/.emacs.d/init.el\")' > ~/.emacs.el && exec bash"
+       tty: true                   # Keep the terminal open
+       stdin_open: true            # Enable standard input
+       extra_hosts:
+         - "host.docker.internal:host-gateway"  # Ensure host resolution for DISPLAY
+   volumes:
+     EmacsDir:
+       external: true              # Use the external volume
+     sshDir:
+       external: true
+     dockerNFS:
+       external: true
+ #+end_src
+- 需求：
+  - 解决x11无法弹出的错误
+  - x11的分辨率可以适配macbook显示器分辨率
+- 额外要求：
+  输出格式为emacs org格式
+- logs
+  - start docker时出现warnning：
+   #+begin_src bash
+     (base) kakaluote@kakaluotedeMacBook-Air emacs % docker-compose up -d
+     WARN[0000] The "XAUTHORITY" variable is not set. Defaulting to a blank string. 
+     WARN[0000] /Users/kakaluote/emacs/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
+     [+] Running 1/1
+      ✔ Container ubuntu_emacs  Started 
+   #+end_src
+  - 在container中出错：
+   #+begin_src bash
+     root@docker-desktop:/opt# xclock
+     Authorization required, but no authorization protocol specified
+     
+     Error: Can't open display: host.docker.internal:0
+   #+end_src
+ 
+ 
+
+* dockerfile add new user
+** 现在的状态
+- 已经有一个dockerfile
+  #+begin_src dockerfile
+    # 使用最新的 Ubuntu 基础镜像
+    FROM ubuntu-emacs:24.04-base
+
+    # 设置维护者信息
+    LABEL MAINTAINER="Yang Liu"
+
+    # 设置非交互模式，避免安装包时交互提示
+    ENV DEBIAN_FRONTEND=noninteractive
+
+    COPY resource .
+
+    RUN tar -xf emacs-*.tar.xz
+    RUN cd emacs-*/ && ./autogen.sh
+
+    # Configure and run
+    RUN cd emacs-*/ && ./configure --with-native-compilation --with-mailutils --with-json
+
+    ENV JOBS=2
+    RUN cd emacs-*/ && make -j ${JOBS} && make install
+
+    RUN rm -rf /opt/*
+
+    ENTRYPOINT ["/bin/bash", "-c"]
+
+    # build command
+    # docker build -t ubuntu-emacs:24.04 .
+  #+end_src
+** 需求：
+- 在dockerfile中添加新的用户(liuyang)，并作为默认的工作用户
+** 回答(llm的回答使用emacs org格式在这个子级别下)：
+*** 更新后的 Dockerfile
+#+begin_src dockerfile
+# 使用最新的 Ubuntu 基础镜像
+FROM ubuntu-emacs:24.04-base
+
+# 设置维护者信息
+LABEL MAINTAINER="Yang Liu"
+
+# 设置非交互模式，避免安装包时交互提示
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 添加资源文件
+COPY resource .
+
+# 解压并准备 Emacs 源码
+RUN tar -xf emacs-*.tar.xz
+RUN cd emacs-*/ && ./autogen.sh
+
+# 配置并安装 Emacs
+RUN cd emacs-*/ && ./configure --with-native-compilation --with-mailutils --with-json
+ENV JOBS=2
+RUN cd emacs-*/ && make -j ${JOBS} && make install
+
+# 清理不必要的文件
+RUN rm -rf /opt/*
+
+# 添加新的用户 liuyang
+RUN useradd -m -s /bin/bash liuyang
+
+# 设置默认用户和工作目录
+USER liuyang
+WORKDIR /home/liuyang
+
+# 设置入口点
+ENTRYPOINT ["/bin/bash", "-c"]
+
+# build command
+# docker build -t ubuntu-emacs:24.04 .
+#+end_src
+*** 说明
+- **新增加的指令**：
+  - `RUN useradd -m -s /bin/bash liuyang`：创建一个名为 `liuyang` 的用户，带有主目录，并设置默认 shell 为 bash。
+  - `USER liuyang`：切换到 `liuyang` 用户，作为 Docker 容器运行时的默认用户。
+  - `WORKDIR /home/liuyang`：将默认工作目录设置为 `liuyang` 的主目录。

@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  emacs-container:
+    image: ubuntu-emacs:24.04  # Use the specified image
+    container_name: ubuntu_emacs
+    privileged: true
+    network_mode: "host" # Use host networking
+    volumes:
+      - EmacsDir:/root/emacsdir  # Mount the volume
+      - sshDir:/root/.ssh
+      - dockerNFS:/root/share
+      - /tmp/.X11-unix:/tmp/.X11-unix  # Mount X11 socket for GUI
+      - /Users/kakaluote/:/Users/kakaluote  # Mount additional host directory
+    environment:
+      - SPACEMACSDIR=/root/emacsdir
+      - DISPLAY=host.docker.internal:0  # Forward GUI display
+      # - DISPLAY=${DISPLAY}  # Forward GUI display
+      - XAUTHORITY=${XAUTHORITY}  # Pass XAUTHORITY
+    command: >
+      "echo '(load-file \"~/emacsdir/.emacs.d/init.el\")' > ~/.emacs.el && exec bash"
+    tty: true                   # Keep the terminal open
+    stdin_open: true            # Enable standard input
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Ensure host resolution for DISPLAY
+volumes:
+  EmacsDir:
+    external: true              # Use the external volume
+  sshDir:
+    external: true
+  dockerNFS:
+    external: true
