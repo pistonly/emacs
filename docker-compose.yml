@@ -1,21 +1,27 @@
-version: '3.8'
 services:
   emacs-container:
     image: ubuntu-emacs:24.04  # Use the specified image
     container_name: ubuntu_emacs
+    user: liuyang
+    working_dir: /home/liuyang
     privileged: true
     network_mode: "host" # Use host networking
+    ports:
+      - 9998:9998
+      - 8888:8888
     volumes:
-      - EmacsDir:/root/emacsdir  # Mount the volume
-      - sshDir:/root/.ssh
-      - dockerNFS:/root/share
+      - home-liuyang:/home/liuyang
+      - EmacsDir:/home/liuyang/emacsdir  # Mount the volume
+      - sshDir:/home/liuyang/.ssh
+      - SharedDocuments:/home/liuyang/Documents
+      - SharedConda:/home/liuyang/conda
       - /tmp/.X11-unix:/tmp/.X11-unix  # Mount X11 socket for GUI
       - /Users/kakaluote/:/Users/kakaluote  # Mount additional host directory
     environment:
       - SPACEMACSDIR=/root/emacsdir
       - DISPLAY=host.docker.internal:0  # Forward GUI display
-      # - DISPLAY=${DISPLAY}  # Forward GUI display
       - XAUTHORITY=${XAUTHORITY}  # Pass XAUTHORITY
+      - EMACS_SOCKET_NAME=/Users/kakaluote/Documents/tmp/emacs/docker_emacs_server
     command: >
       "echo '(load-file \"~/emacsdir/.emacs.d/init.el\")' > ~/.emacs.el && exec bash"
     tty: true                   # Keep the terminal open
@@ -27,5 +33,11 @@ volumes:
     external: true              # Use the external volume
   sshDir:
     external: true
-  dockerNFS:
+  SharedDocuments:
     external: true
+  SharedConda:
+    external: true
+  home-liuyang:
+    external: true              # Use the external volume
+
+
