@@ -3,9 +3,18 @@
 ** start container
 #+begin_src zsh
   docker compose up -d
+  docker exec -it ubuntu_emacs bash
 #+end_src
-
-
+* install
+- build base image
+ #+begin_src bash
+  docker build -t ubuntu-emacs:24.04-base -f dockerfile_ubuntu24.04-emacs-base .
+ #+end_src
+- build image
+ #+begin_src bash
+  docker build -t ubuntu-emacs:24.04 .
+ #+end_src
+ 
 * start container
 - 现在的状态：
   - 已经有了安装好emacs的docker镜像：ubuntu-emacs:24.04
