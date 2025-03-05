@@ -644,60 +644,131 @@ ENTRYPOINT ["/bin/bash", "-c"]
 - *方案3*（环境打包/还原）则在需要轻量、偶尔同步环境时很方便。  
 
 上述几种方案都可以满足“在不同容器间使用相同的 Conda 环境”这一需求，选择时需综合考虑镜像大小、更新频率、并发安全等因素。祝你 Docker + Conda 环境共享顺利！
-* docker ubuntu install network tools
-** how to check ip address in docker container?
 
-
-To check the IP address in a Docker container, you can install the =net-tools= package, which includes the =ifconfig= command. Here's how you can do it:
-
-1. *Install =net-tools= in the container*:
-   - First, enter the container:
-     #+begin_src bash
-     docker exec -it <container_name> /bin/bash
-     #+end_src
-   - Then, install =net-tools=:
-     #+begin_src bash
-     apt-get update && apt-get install -y net-tools
-     #+end_src
-
-2. *Check the IP address*:
-   - After installing =net-tools=, you can use the =ifconfig= command to check the IP address:
-     #+begin_src bash
-     ifconfig
-     #+end_src
-   - Look for the =inet= address under the network interface (e.g., =eth0=).
-
-Alternatively, you can use the =ip= command, which is usually available by default:
-#+begin_src bash
-ip addr show
-#+end_src
-
-This will display the network interfaces and their associated IP addresses.
-* start jupyter notebook in docker and visit in host.
+* docker volume to container
 :PROPERTIES:
-:GPTEL_TOPIC: start-jupyter-notebook-in-docker-and-visit-in-host
+:GPTEL_TOPIC: docker-volume-to-container
+:GPTEL_MODEL: ep-20250225171352-ngwv9
+:GPTEL_BACKEND: DS_v3
+:GPTEL_SYSTEM: You are a large language model living in Emacs and a helpful assistant. Respond concisely.
 :END:
 
+下面是我的dockerfile
+#+begin_src dockerfile
+  # 使用最新的 Ubuntu 基础镜像
+FROM ubuntu-emacs:24.04-base
 
-To start a Jupyter Notebook in Docker and access it from your host machine, follow these steps:
+# 设置维护者信息
+LABEL MAINTAINER="Yang Liu"
 
-1. *Pull the Jupyter Docker image* (if not already pulled):
-   #+begin_src sh
-   docker pull jupyter/base-notebook
-   #+end_src
+# 设置非交互模式，避免安装包时交互提示
+ENV DEBIAN_FRONTEND=noninteractive
 
-2. *Run the Jupyter Notebook container*:
-   #+begin_src sh
-   docker run -p 8888:8888 jupyter/base-notebook
-   #+end_src
-   This maps port 8888 on the container to port 8888 on your host.
+WORKDIR /opt
 
-3. *Access the Notebook*:
-   - Open a browser on your host machine.
-   - Visit =http://localhost:8888=.
-   - Use the token provided in the terminal output to log in.
+# 添加资源文件
+COPY resource/emacs-*.tar.xz .
 
-For persistent storage, you can mount a host directory:
-#+begin_src sh
-docker run -p 8888:8888 -v /path/on/host:/home/jovyan/work jupyter/base-notebook
+# 解压并准备 Emacs 源码
+RUN tar -xf emacs-*.tar.xz
+RUN cd emacs-*/ && ./autogen.sh
+
+# 配置并安装 Emacs
+RUN cd emacs-*/ && ./configure --with-native-compilation --with-mailutils --with-json
+ENV JOBS=2
+RUN cd emacs-*/ && make -j ${JOBS} && make install
+
+# 清理不必要的文件
+RUN rm -rf /opt/*
+
+# 添加新的用户 liuyang，指定用户ID
+RUN useradd -m -u 1001 -s /bin/bash liuyang
+
+# 安装 sudo 并设置免密码规则
+RUN apt-get update && apt-get install -y sudo \
+    && mkdir -p /etc/sudoers.d \
+    && echo "liuyang ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers.d/liuyang \
+    && chmod 440 /etc/sudoers.d/liuyang
+
+# 添加字体
+RUN mkdir -p /usr/share/fonts/custom
+COPY resource/fonts /usr/share/fonts/custom/
+RUN apt-get install -y unzip \
+    && unzip '/usr/share/fonts/custom/*.zip' -d /usr/share/fonts/custom/ \
+    && fc-cache -fv
+RUN rm -rf /usr/share/fonts/custom/*.zip
+
+# 设置入口点
+ENTRYPOINT ["/bin/bash", "-c"]
+
+# build command
+# docker build -t ubuntu-emacs:24.04 .
 #+end_src
+
+下面是我的docker-compose.yml
+#+begin_src yml
+  services:
+  emacs-container:
+    image: ubuntu-emacs:24.04  # Use the specified image
+    container_name: ubuntu_emacs
+    user: liuyang
+    working_dir: /home/liuyang
+    privileged: true
+    network_mode: "host" # Use host networking
+    ports:
+      - 9998:9998
+      - 8888:8888
+    volumes:
+      - home-liuyang:/home/liuyang
+      - EmacsDir:/home/liuyang/emacsdir  # Mount the volume
+      - sshDir:/home/liuyang/.ssh
+      - SharedDocuments:/home/liuyang/Documents
+      - SharedConda:/home/liuyang/conda
+      - /tmp/.X11-unix:/tmp/.X11-unix  # Mount X11 socket for GUI
+      - /Users/kakaluote/:/Users/kakaluote  # Mount additional host directory
+    environment:
+      - SPACEMACSDIR=/root/emacsdir
+      - DISPLAY=host.docker.internal:0  # Forward GUI display
+      - XAUTHORITY=${XAUTHORITY}  # Pass XAUTHORITY
+      - EMACS_SOCKET_NAME=/Users/kakaluote/Documents/tmp/emacs/docker_emacs_server
+    command: >
+      "echo '(load-file \"~/emacsdir/.emacs.d/init.el\")' > ~/.emacs.el && exec bash"
+    tty: true                   # Keep the terminal open
+    stdin_open: true            # Enable standard input
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Ensure host resolution for DISPLAY
+volumes:
+  EmacsDir:
+    external: true              # Use the external volume
+  sshDir:
+    external: true
+  SharedDocuments:
+    external: true
+  SharedConda:
+    external: true
+  home-liuyang:
+    external: true              # Use the external volume
+
+#+end_src
+
+当我进入container后没有volumes挂载路径的写权限，比如/home/liuyang/Documents文件夹所属的用户为root。使挂载的volume属于用户liuyang？
+
+
+要使挂载的卷属于用户 =liuyang=，可以在 =docker-compose.yml= 中添加一个 =command= 来更改挂载目录的所有权。具体步骤如下：
+
+1. 在 =docker-compose.yml= 中修改 =command=，在启动容器时更改挂载目录的所有权：
+
+#+begin_src yaml
+command: >
+  "chown -R liuyang:liuyang /home/liuyang && echo '(load-file \"~/emacsdir/.emacs.d/init.el\")' > ~/.emacs.el && exec bash"
+#+end_src
+
+2. 确保 =privileged: true= 已设置，以便容器有权限更改文件所有权。
+
+3. 重新启动容器：
+
+#+begin_src bash
+docker-compose up -d
+#+end_src
+
+这样，挂载的卷在容器启动时会自动更改为 =liuyang= 用户的所有权，从而解决写权限问题。

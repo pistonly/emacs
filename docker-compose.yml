@@ -16,7 +16,7 @@ services:
       - SharedDocuments:/home/liuyang/Documents
       - SharedConda:/home/liuyang/conda
       - /tmp/.X11-unix:/tmp/.X11-unix  # Mount X11 socket for GUI
-      - /Users/kakaluote/:/Users/kakaluote  # Mount additional host directory
+      - ~/:/home/liuyang-s  # Mount additional host directory
     environment:
       - SPACEMACSDIR=/root/emacsdir
       - DISPLAY=host.docker.internal:0  # Forward GUI display
